@@ -17,19 +17,23 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Gemini CLI Summary
-        uses: google-gemini/gemini-github-action@v1 # Basis-Action für Gemini Integration
+ - name: Gemini AI Audit
+        id: gemini
+        uses: google-github-actions/auth@v2
         with:
-          api-key: ${{ secrets.GEMINI_API_KEY }}
-          model: 'gemini-1.5-pro'
-          prompt: |
-            Analysiere diesen Pull Request und erstelle eine Zusammenfassung für unser 'Zentrales Logbuch'.
-            Nutze folgendes Format:
-            ### 📝 Logbuch-Eintrag (Auto-Generated)
-            **Modul:** [Welches Systemteil wurde geändert?]
-            **Änderung:** [Kurze, präzise Beschreibung der technischen Anpassung]
-            **Status:** 🛠 In Progress / ✅ Ready
-            **💾 Memory-Update:** [Gibt es neue Fakten für die Memory-Docs?]
-            **⚠️ Konflikte:** [Gibt es technische Schulden oder Bremsklötze?]
-            
-            Halte dich kurz, wir nutzen das für ein ADHS-optimiertes System.
+          api_key: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Generate Summary via API
+        run: |
+          # Wir nutzen einen direkten API-Aufruf, um die 'Repository not found' Fehler zu umgehen.
+          # Das ist effizienter und weniger fehleranfällig für unsere Infrastruktur.
+          PR_DIFF=$(git diff origin/main...HEAD)
+          
+          curl https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${{ secrets.GEMINI_API_KEY }} \
+            -H 'Content-Type: application/json' \
+            -X POST \
+            -d '{
+              "contents": [{
+                "parts":[{"text": "Du bist Techa. Analysiere diesen Diff für das Logbuch: '"$PR_DIFF"'"}]
+              }]
+            }' > summary_output.json
