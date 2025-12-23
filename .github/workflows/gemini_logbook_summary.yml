@@ -23,32 +23,32 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          # 1. RADAR: Welche Modelle sieht dein Key?
+          # --- TECHA RADAR START ---
+          # Wir fragen die API: "Welche Modelle darf ich nutzen?"
           echo "📡 Frage verfügbare Modelle ab..."
           curl -s "https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY" > models.json
           
-          echo "📋 Verfügbare Modelle (Auszug):"
-          # Wir filtern die JSON-Antwort, um nur die Namen zu sehen.
+          echo "📋 DEINE VERFÜGBAREN MODELLE:"
+          # Zeigt die Liste sauber im Log an
           jq -r '.models[]?.name' models.json || cat models.json
           echo "----------------------------------------"
+          # --- TECHA RADAR ENDE ---
 
-          # 2. Diff holen
+          # 1. Diff holen
           PR_DIFF=$(git diff origin/main...HEAD)
           
-          # 3. Payload bauen
+          # 2. Payload bauen
           jq -n \
             --arg text "Du bist Techa. Analysiere diesen Diff für das Logbuch. Halte dich an das Sorority Protocol v2.1 Format:\n\n$PR_DIFF" \
             '{contents: [{parts: [{text: $text}]}]}' > payload.json
 
-          # 4. API Call - Versuch mit 'gemini-1.5-flash-latest'
-          # Falls das auch fehlschlägt, haben wir oben im Log die Liste der GÜLTIGEN Namen.
+          # 3. API Call (Versuch mit 'gemini-1.5-flash-latest')
           curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=$GEMINI_API_KEY" \
             -H 'Content-Type: application/json' \
             -X POST \
             -d @payload.json > response.json
             
-          # 5. Antwort validieren
-          # Wir prüfen explizit auf Fehler und geben sie aus
+          # 4. Antwort validieren
           if ! jq -e '.candidates[0].content.parts[0].text' response.json > /dev/null; then
             echo "::error::API Response invalid. Full Response:"
             cat response.json
