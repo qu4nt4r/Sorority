@@ -17,23 +17,48 @@ jobs:
         with:
           fetch-depth: 0
 
-- name: Gemini AI Audit
+      - name: Generate Summary via Gemini API
         id: gemini
-        uses: google-github-actions/auth@v2
-        with:
-          api_key: ${{ secrets.GEMINI_API_KEY }}
-
-      - name: Generate Summary via API
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          # Wir nutzen einen direkten API-Aufruf, um die 'Repository not found' Fehler zu umgehen.
-          # Das ist effizienter und weniger fehleranfällig für unsere Infrastruktur.
+          # 1. Diff holen
           PR_DIFF=$(git diff origin/main...HEAD)
           
-          curl https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${{ secrets.GEMINI_API_KEY }} \
+          # 2. JSON Payload sicher mit jq bauen (verhindert Syntax-Fehler bei Sonderzeichen im Code)
+          # Wir nutzen jq, um den Text sicher zu escapen.
+          jq -n \
+            --arg text "Du bist Techa. Analysiere diesen Diff für das Logbuch. Halte dich an das Sorority Protocol v2.1 Format:\n\n$PR_DIFF" \
+            '{contents: [{parts: [{text: $text}]}]}' > payload.json
+
+          # 3. API Call an Gemini
+          curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=$GEMINI_API_KEY" \
             -H 'Content-Type: application/json' \
             -X POST \
-            -d '{
-              "contents": [{
-                "parts":[{"text": "Du bist Techa. Analysiere diesen Diff für das Logbuch: '"$PR_DIFF"'"}]
-              }]
-            }' > summary_output.json
+            -d @payload.json > response.json
+            
+          # 4. Antwort extrahieren
+          # Wir parsen die JSON-Antwort, um nur den Text zu bekommen
+          SUMMARY=$(jq -r '.candidates[0].content.parts[0].text' response.json)
+          
+          # 5. Output für den nächsten Step verfügbar machen (Multiline-Safe)
+          echo "SUMMARY<<EOF" >> $GITHUB_ENV
+          echo "$SUMMARY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Post Comment to PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const summary = process.env.SUMMARY;
+            if (!summary || summary === 'null') {
+              console.log("Keine Zusammenfassung generiert (oder API Fehler).");
+              return;
+            }
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            })
