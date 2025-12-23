@@ -23,27 +23,16 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          # --- TECHA RADAR START ---
-          # Wir fragen die API: "Welche Modelle darf ich nutzen?"
-          echo "📡 Frage verfügbare Modelle ab..."
-          curl -s "https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY" > models.json
-          
-          echo "📋 DEINE VERFÜGBAREN MODELLE:"
-          # Zeigt die Liste sauber im Log an
-          jq -r '.models[]?.name' models.json || cat models.json
-          echo "----------------------------------------"
-          # --- TECHA RADAR ENDE ---
-
           # 1. Diff holen
           PR_DIFF=$(git diff origin/main...HEAD)
           
-          # 2. Payload bauen
+          # 2. Payload sicher bauen
           jq -n \
             --arg text "Du bist Techa. Analysiere diesen Diff für das Logbuch. Halte dich an das Sorority Protocol v2.1 Format:\n\n$PR_DIFF" \
             '{contents: [{parts: [{text: $text}]}]}' > payload.json
 
-          # 3. API Call (Versuch mit 'gemini-1.5-flash-latest')
-          curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=$GEMINI_API_KEY" \
+          # 3. API Call an Gemini 2.0 Flash (Dein verfügbarer High-Speed Endpoint)
+          curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
             -H 'Content-Type: application/json' \
             -X POST \
             -d @payload.json > response.json
@@ -57,7 +46,7 @@ jobs:
 
           SUMMARY=$(jq -r '.candidates[0].content.parts[0].text' response.json)
           
-          # Output speichern
+          # 5. Output sicher speichern
           echo "SUMMARY<<EOF" >> $GITHUB_ENV
           echo "$SUMMARY" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
