@@ -3,6 +3,7 @@ name: Gemini PR Summary for Logbook
 on:
   pull_request:
     types: [opened, synchronize]
+  workflow_dispatch: # Ermöglicht manuelles Starten zum Testen!
 
 jobs:
   summarize:
@@ -17,44 +18,55 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check Secret Presence (Debug)
+        env:
+          THE_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -z "$THE_KEY" ]; then
+            echo "::error::⛔ SECRET IST LEER! Prüfe GitHub Settings -> Secrets -> Actions."
+            exit 1
+          else
+            echo "✅ Secret wurde erfolgreich in die Env geladen (Länge: ${#THE_KEY} Zeichen)."
+          fi
+
       - name: Generate Summary via Gemini API
         id: gemini
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          # 1. Diff holen
           PR_DIFF=$(git diff origin/main...HEAD)
           
-          # 2. Payload sicher bauen (verhindert Syntax-Crash durch Sonderzeichen im Code)
-          # Wir nutzen jq, um den Text sicher zu escapen.
+          # Payload bauen
           jq -n \
-            --arg text "Du bist Techa. Analysiere diesen Diff für das Logbuch. Halte dich an das Sorority Protocol v2.1 Format:\n\n$PR_DIFF" \
+            --arg text "Du bist Techa. Fasse diesen Code-Diff kurz zusammen:\n\n$PR_DIFF" \
             '{contents: [{parts: [{text: $text}]}]}' > payload.json
 
-          # 3. API Call an Gemini
-          curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=$GEMINI_API_KEY" \
+          # API Call mit -v (verbose) für mehr Details im Fehlerfall
+          HTTP_CODE=$(curl -s -o response.json -w "%{http_code}" -X POST \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=$GEMINI_API_KEY" \
             -H 'Content-Type: application/json' \
-            -X POST \
-            -d @payload.json > response.json
+            -d @payload.json)
+          
+          echo "HTTP Status Code: $HTTP_CODE"
+          
+          if [ "$HTTP_CODE" -ne 200 ]; then
+             echo "::error::API Request failed with status $HTTP_CODE"
+             cat response.json
+             exit 1
+          fi
             
-          # 4. Antwort extrahieren
           SUMMARY=$(jq -r '.candidates[0].content.parts[0].text' response.json)
           
-          # 5. Output sicher speichern
           echo "SUMMARY<<EOF" >> $GITHUB_ENV
           echo "$SUMMARY" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
       - name: Post Comment to PR
+        if: github.event_name == 'pull_request' # Nur bei echtem PR ausführen
         uses: actions/github-script@v7
         with:
           script: |
             const summary = process.env.SUMMARY;
-            if (!summary || summary === 'null') {
-              console.log("Keine Zusammenfassung generiert (oder API Fehler).");
-              return;
-            }
-            
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
