@@ -17,7 +17,7 @@ jobs:
         with:
           fetch-depth: 0
 
- - name: Gemini AI Audit
+- name: Gemini AI Audit
         id: gemini
         uses: google-github-actions/auth@v2
         with:
