@@ -31,19 +31,23 @@ jobs:
             --arg text "Du bist Techa. Analysiere diesen Diff für das Logbuch. Halte dich an das Sorority Protocol v2.1 Format:\n\n$PR_DIFF" \
             '{contents: [{parts: [{text: $text}]}]}' > payload.json
 
-          # 3. API Call an Gemini 2.0 Flash (Dein verfügbarer High-Speed Endpoint)
-          curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
+          # 3. API Call an "gemini-flash-latest"
+          # Dieser Alias stand auf deiner Liste und hat meist stabilere Quotas als die 2.0 Preview.
+          curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=$GEMINI_API_KEY" \
             -H 'Content-Type: application/json' \
             -X POST \
             -d @payload.json > response.json
             
-          # 4. Antwort validieren
-          if ! jq -e '.candidates[0].content.parts[0].text' response.json > /dev/null; then
-            echo "::error::API Response invalid. Full Response:"
+          # 4. Antwort validieren (Mit Retry-Hinweis bei 429)
+          HTTP_STATUS=$(jq -r '.error.code // 200' response.json)
+          
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "::error::API Error ($HTTP_STATUS). Full Response:"
             cat response.json
             exit 1
           fi
 
+          # Extraktion
           SUMMARY=$(jq -r '.candidates[0].content.parts[0].text' response.json)
           
           # 5. Output sicher speichern
