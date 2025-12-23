@@ -1,0 +1,35 @@
+name: Gemini PR Summary for Logbook
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  summarize:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gemini CLI Summary
+        uses: google-gemini/gemini-github-action@v1 # Basis-Action für Gemini Integration
+        with:
+          api-key: ${{ secrets.GEMINI_API_KEY }}
+          model: 'gemini-1.5-pro'
+          prompt: |
+            Analysiere diesen Pull Request und erstelle eine Zusammenfassung für unser 'Zentrales Logbuch'.
+            Nutze folgendes Format:
+            ### 📝 Logbuch-Eintrag (Auto-Generated)
+            **Modul:** [Welches Systemteil wurde geändert?]
+            **Änderung:** [Kurze, präzise Beschreibung der technischen Anpassung]
+            **Status:** 🛠 In Progress / ✅ Ready
+            **💾 Memory-Update:** [Gibt es neue Fakten für die Memory-Docs?]
+            **⚠️ Konflikte:** [Gibt es technische Schulden oder Bremsklötze?]
+            
+            Halte dich kurz, wir nutzen das für ein ADHS-optimiertes System.
