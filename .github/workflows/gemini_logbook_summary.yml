@@ -25,7 +25,7 @@ jobs:
           # 1. Diff holen
           PR_DIFF=$(git diff origin/main...HEAD)
           
-          # 2. JSON Payload sicher mit jq bauen (verhindert Syntax-Fehler bei Sonderzeichen im Code)
+          # 2. Payload sicher bauen (verhindert Syntax-Crash durch Sonderzeichen im Code)
           # Wir nutzen jq, um den Text sicher zu escapen.
           jq -n \
             --arg text "Du bist Techa. Analysiere diesen Diff für das Logbuch. Halte dich an das Sorority Protocol v2.1 Format:\n\n$PR_DIFF" \
@@ -38,10 +38,9 @@ jobs:
             -d @payload.json > response.json
             
           # 4. Antwort extrahieren
-          # Wir parsen die JSON-Antwort, um nur den Text zu bekommen
           SUMMARY=$(jq -r '.candidates[0].content.parts[0].text' response.json)
           
-          # 5. Output für den nächsten Step verfügbar machen (Multiline-Safe)
+          # 5. Output sicher speichern
           echo "SUMMARY<<EOF" >> $GITHUB_ENV
           echo "$SUMMARY" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
